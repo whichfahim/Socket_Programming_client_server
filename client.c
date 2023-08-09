@@ -6,6 +6,7 @@
 #include <string.h>
 
 // 137.207.82.53
+// 127.0.0.1
 
 int main(int argc, char *argv[])
 { // E.g., 1, client
