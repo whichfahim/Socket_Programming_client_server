@@ -33,6 +33,22 @@ void processclient(int client_sd)
         // else
         // printf this file does not exist
     }
+    else if (strncmp(buff1, "tarfgetz ", 6) == 0)
+    {
+        // code here
+    }
+    else if (strncmp(buff1, "filesrch ", 6) == 0)
+    {
+        // code here
+    }
+    else if (strncmp(buff1, "targzf ", 6) == 0)
+    {
+        // code here
+    }
+    else if (strncmp(buff1, "getdirf ", 6) == 0)
+    {
+        // code here
+    }
 }
 
 int main(int argc, char *argv[])
