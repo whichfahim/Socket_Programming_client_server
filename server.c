@@ -21,17 +21,19 @@ void processclient(int client_sd)
     }
     else if (strncmp(buff1, "fgets ", 6) == 0)
     {
-        // execute fgets command
-
-        // iterate through list of files
-
-        // check if file exists
-
-        // if -e then
-        // search for file in home directory
-        // make a tar of the file and send it to the client
-        // else
-        // printf this file does not exist
+        
+        //execute fgets command
+                const char *command = buff1 + 6; // Extract the command after "fgets "
+        		printf("Client entered: fgets %s",command);
+        		//iterate through list of files
+        				
+        			//check if file exists
+        				
+        				//if -e then	
+        					//search for file in home directory
+        					//make a tar of the file and send it to the client
+        				//else
+        					//printf this file does not exist
     }
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
