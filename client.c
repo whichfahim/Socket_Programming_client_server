@@ -57,8 +57,9 @@ int main(int argc, char *argv[])
 
     char buff[50];
     printf("\nEnter the message to be sent to the server\n");
-    scanf("%s", &buff);
-
+    // scanf("%s",&buff);
+    gets(&buff);
+    printf("Sending message: %s\n", buff); // Print the contents of buff before writing
     write(client_sd, buff, 100);
 
     exit(0);
