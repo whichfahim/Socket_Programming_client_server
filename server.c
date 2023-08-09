@@ -39,20 +39,21 @@ int main(int argc, char *argv[])
 
     printf("Server listening on port: %d...\n", portNumber);
 
-    // while (1){
-    con_sd = accept(lis_sd, (struct sockaddr *)NULL, NULL); // accept()
+    while (1)
+    {
+        con_sd = accept(lis_sd, (struct sockaddr *)NULL, NULL); // accept()
 
-    char buff[50];
-    printf("\nType your message to the client\n");
-    scanf("%s", &buff);
-    write(con_sd, buff, 50);
+        /*
+        char buff[50];
+        printf("\nType your message to the client\n");
+        scanf("%s",&buff);
+        write(con_sd, buff, 50);
+        */
 
-    printf("Message from the client\n");
-    char buff1[50];
-    read(con_sd, buff1, 50);
-    printf("%s\n", buff1);
-    sleep(1);
-    //}
-
-    close(con_sd);
+        printf("Message from the client\n");
+        char buff1[50];
+        read(con_sd, buff1, 50);
+        printf("%s\n", buff1);
+        close(con_sd);
+    }
 }

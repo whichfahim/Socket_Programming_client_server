@@ -44,13 +44,17 @@ int main(int argc, char *argv[])
         exit(3);
     }
 
-    if (read(client_sd, message, 100) < 0)
-    { // read()
+    /*
+    if (read(client_sd, message, 100)<0){//read()
         fprintf(stderr, "read() error\n");
         exit(3);
     }
 
+
+
     fprintf(stderr, "%s\n", message);
+    */
+
     char buff[50];
     printf("\nEnter the message to be sent to the server\n");
     scanf("%s", &buff);
