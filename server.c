@@ -40,7 +40,39 @@ void processclient(int client_sd)
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
         // code here
+        char filename[100];
+        sscanf(command + 9, "%s", filename);
+
+        // Perform file search logic
+        DIR *dir;
+        struct dirent *ent;
+        struct stat file_stat;
+        int found = 0;
+
+        if ((dir = opendir("~")) != NULL) {
+            while ((ent = readdir(dir)) != NULL) {
+                if (strcmp(ent->d_name, filename) == 0) {
+                    char filepath[256];
+                    snprintf(filepath, sizeof(filepath), "~/%s", filename);
+                    if (stat(filepath, &file_stat) == 0) {
+                        char result[256];
+                        snprintf(result, sizeof(result), "Found: %s, Size: %ld bytes, Date: %s", filename, file_stat.st_size, ctime(&file_stat.st_ctime));
+                        write(client_sd, result, sizeof(result));
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+            closedir(dir);
+        }
+
+        if (!found) {
+            char result[] = "File not found";
+            write(client_sd, result, sizeof(result));
+        }
     }
+
+    
     else if (strncmp(buff1, "targzf ", 6) == 0)
     {
         // code here
