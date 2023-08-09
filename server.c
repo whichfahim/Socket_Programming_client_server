@@ -6,6 +6,14 @@
 #include <string.h>
 #include <time.h>
 
+void processclient(int client_sd)
+{
+    printf("Message from the client\n");
+    char buff1[50];
+    read(client_sd, buff1, 50);
+    printf("%s\n", buff1);
+}
+
 int main(int argc, char *argv[])
 { // E.g., 1, server
     char *myTime;
@@ -37,23 +45,47 @@ int main(int argc, char *argv[])
 
     listen(lis_sd, 5);
 
-    printf("Server listening on port: %d...\n", portNumber);
-
+    int numChildren = 0; // Count of child processes
     while (1)
     {
+        if (numChildren >= 6)
+        {
+            // Limit the number of children to 6
+            wait(NULL); // Wait for any child process to finish
+            numChildren--;
+        }
+        printf("Server listening on port: %d...\n", portNumber);
+
         con_sd = accept(lis_sd, (struct sockaddr *)NULL, NULL); // accept()
+        if (con_sd < 0)
+        {
+            perror("accept");
+            continue;
+        }
 
-        /*
-        char buff[50];
-        printf("\nType your message to the client\n");
-        scanf("%s",&buff);
-        write(con_sd, buff, 50);
-        */
+        int pid = fork();
+        if (pid == 0)
+        {
+            // Child process
+            // Close listening socket in child
+            close(lis_sd);
 
-        printf("Message from the client\n");
-        char buff1[50];
-        read(con_sd, buff1, 50);
-        printf("%s\n", buff1);
-        close(con_sd);
+            processclient(con_sd);
+
+            close(con_sd);
+
+            // Child process exits
+            exit(0);
+        }
+        else if (pid > 0)
+        {
+            // Parent process
+            close(con_sd); // Close connection socket in parent
+            numChildren++;
+        }
+        else
+        {
+            printf("error forking");
+        }
     }
 }
