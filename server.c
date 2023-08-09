@@ -78,6 +78,27 @@ int main(int argc, char *argv[])
 
     // bind
     bind(lis_sd, (struct sockaddr *)&servAdd, sizeof(servAdd));
+
+    struct sockaddr_in serverAddress;
+    socklen_t addrLen = sizeof(serverAddress);
+
+    // Get the address information of the bound socket
+    if (getsockname(lis_sd, (struct sockaddr *)&serverAddress, &addrLen) == -1)
+    {
+        perror("getsockname");
+        exit(1);
+    }
+
+    // Convert binary IPv4 address to human-readable format
+    char ipAddress[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, &(serverAddress.sin_addr), ipAddress, INET_ADDRSTRLEN) == NULL)
+    {
+        perror("inet_ntop");
+        exit(1);
+    }
+
+    printf("Server IP Address: %s\n", ipAddress);
+
     // listen
 
     listen(lis_sd, 5);
