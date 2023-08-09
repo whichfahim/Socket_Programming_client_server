@@ -45,22 +45,17 @@ void processclient(int client_sd)
 
         // Perform file search logic
         DIR *dir;
-        struct dirent *ent;
-        struct stat file_stat;
+        struct dirent *entry;
         int found = 0;
 
         if ((dir = opendir("~")) != NULL) {
-            while ((ent = readdir(dir)) != NULL) {
-                if (strcmp(ent->d_name, filename) == 0) {
-                    char filepath[256];
-                    snprintf(filepath, sizeof(filepath), "~/%s", filename);
-                    if (stat(filepath, &file_stat) == 0) {
-                        char result[256];
-                        snprintf(result, sizeof(result), "Found: %s, Size: %ld bytes, Date: %s", filename, file_stat.st_size, ctime(&file_stat.st_ctime));
-                        write(client_sd, result, sizeof(result));
-                        found = 1;
-                        break;
-                    }
+            while ((entry = readdir(dir)) != NULL) {
+                if (strcmp(entry->d_name, filename) == 0) {
+                    char result[256];
+                    snprintf(result, sizeof(result), "File found: %s", filename);
+                    write(client_sd, result, sizeof(result));
+                    found = 1;
+                    break;
                 }
             }
             closedir(dir);
@@ -70,6 +65,7 @@ void processclient(int client_sd)
             char result[] = "File not found";
             write(client_sd, result, sizeof(result));
         }
+    
     }
 
     
