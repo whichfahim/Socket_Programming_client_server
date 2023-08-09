@@ -11,6 +11,7 @@ void processclient(int client_sd)
     printf("Message from the client\n");
     char buff1[50];
     read(client_sd, buff1, 50);
+    // fgets(buff1, sizeof(buff1), client_sd);
     printf("%s\n", buff1);
 
     if (strcmp(buff1, "quit") == 0)
@@ -19,10 +20,11 @@ void processclient(int client_sd)
         // break;
         // compare the first 6 characters with "fgets"
     }
-    else if (strncmp(buff1, "fgets ", 6) == 0)
+    else if (strncmp(buff1, "fgets", 6) == 0)
     {
         // execute fgets command
-
+        const char *command = buff1 + 6; // Extract the command after "fgets "
+        printf("Client entered: fgets %s", command);
         // iterate through list of files
 
         // check if file exists
@@ -32,22 +34,6 @@ void processclient(int client_sd)
         // make a tar of the file and send it to the client
         // else
         // printf this file does not exist
-    }
-    else if (strncmp(buff1, "tarfgetz ", 8) == 0)
-    {
-        // code here
-    }
-    else if (strncmp(buff1, "filesrch ", 8) == 0)
-    {
-        // code here
-    }
-    else if (strncmp(buff1, "targzf ", 6) == 0)
-    {
-        // code here
-    }
-    else if (strncmp(buff1, "getdirf ", 7) == 0)
-    {
-        // code here
     }
 }
 
