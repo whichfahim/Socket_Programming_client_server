@@ -12,6 +12,27 @@ void processclient(int client_sd)
     char buff1[50];
     read(client_sd, buff1, 50);
     printf("%s\n", buff1);
+
+    if (strcmp(buff1, "quit") == 0)
+    {
+        printf("Quitting...");
+        // break;
+        // compare the first 6 characters with "fgets"
+    }
+    else if (strncmp(buff1, "fgets ", 6) == 0)
+    {
+        // execute fgets command
+
+        // iterate through list of files
+
+        // check if file exists
+
+        // if -e then
+        // search for file in home directory
+        // make a tar of the file and send it to the client
+        // else
+        // printf this file does not exist
+    }
 }
 
 int main(int argc, char *argv[])
