@@ -15,64 +15,77 @@ void tarfgetz(char buff1[])
     // code here
     unsigned long long minSize, maxSize;
     // returns the number of fields that were successfully converted and assigned
-    // int assigned = sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
-    sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
-    printf("Requested size range: %llu - %llu\n", minSize, maxSize);
 
-    // unsigned long long minSize = 0; // Minimum file size in bytes
-    // unsigned long long maxSize = 1000; // Maximum file size in bytes
+    int assigned = sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
 
-    char *fileList = (char *)malloc(1); // Start with an empty string
-    if (fileList == NULL)
+    // validation for client input
+    if (assigned >= 2 && size1 <= size2)
     {
-        perror("malloc");
-        return EXIT_FAILURE;
-    }
-    fileList[0] = '\0';
+        // only perform these operations if command format is accurate
+        sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
+        printf("Requested size range: %llu - %llu\n", minSize, maxSize);
 
-    findFilesInSizeRange(minSize, maxSize, &fileList);
+        // unsigned long long minSize = 0; // Minimum file size in bytes
+        // unsigned long long maxSize = 1000; // Maximum file size in bytes
 
-    // Create a temporary file to store the list of files
-    char tmpFilePath[] = "/tmp/file_list.txt";
-    int tmpFile = open(tmpFilePath, O_CREAT | O_WRONLY, 0644);
-    if (tmpFile == -1)
-    {
-        perror("open");
+        char *fileList = (char *)malloc(1); // Start with an empty string
+        if (fileList == NULL)
+        {
+            perror("malloc");
+            return EXIT_FAILURE;
+        }
+        fileList[0] = '\0';
+
+        findFilesInSizeRange(minSize, maxSize, &fileList);
+
+        // Create a temporary file to store the list of files
+        char tmpFilePath[] = "/tmp/file_list.txt";
+        int tmpFile = open(tmpFilePath, O_CREAT | O_WRONLY, 0644);
+        if (tmpFile == -1)
+        {
+            perror("open");
+            free(fileList);
+            return EXIT_FAILURE;
+        }
+        write(tmpFile, fileList, strlen(fileList));
+        close(tmpFile);
+
+        // Create tar.gz archive
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            chdir("."); // Change to the current directory
+            execlp("tar", "tar", "-czvf", "temp.tar.gz", "-T", tmpFilePath, NULL);
+            perror("execlp");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid > 0)
+        {
+            wait(NULL);
+        }
+        else
+        {
+            perror("fork");
+            free(fileList);
+            return EXIT_FAILURE;
+        }
+
+        printf("Tar.gz archive created: temp.tar.gz\n");
+
+        // Delete the temporary file
+        if (unlink(tmpFilePath) != 0)
+        {
+            perror("unlink");
+        }
+
         free(fileList);
-        return EXIT_FAILURE;
-    }
-    write(tmpFile, fileList, strlen(fileList));
-    close(tmpFile);
-
-    // Create tar.gz archive
-    pid_t pid = fork();
-    if (pid == 0)
-    {
-        chdir("."); // Change to the current directory
-        execlp("tar", "tar", "-czvf", "temp.tar.gz", "-T", tmpFilePath, NULL);
-        perror("execlp");
-        exit(EXIT_FAILURE);
-    }
-    else if (pid > 0)
-    {
-        wait(NULL);
     }
     else
     {
-        perror("fork");
-        free(fileList);
-        return EXIT_FAILURE;
+        printf("Wrong input format.\n");
+        printf("Usage: tarfgetz minSize maxSize\n");
+        printf("Where, minSize<maxSize");
     }
-
-    printf("Tar.gz archive created: temp.tar.gz\n");
-
-    // Delete the temporary file
-    if (unlink(tmpFilePath) != 0)
-    {
-        perror("unlink");
-    }
-
-    free(fileList);
 }
 
 void processClient(int client_sd)
