@@ -7,6 +7,11 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <fcntl.h>
+
+void tarfgetz()
+{
+}
 
 void processClient(int client_sd)
 {
@@ -30,7 +35,7 @@ void processClient(int client_sd)
         // break;
         // compare the first 6 characters with "fgets"
     }
-    else if (strncmp(buff1, "fgets", 6) == 0)
+    else if (strncmp(buff1, "fgets ", 6) == 0)
     {
 
         // execute fgets command
@@ -107,24 +112,64 @@ void processClient(int client_sd)
         // code here
         unsigned long long minSize, maxSize;
         // returns the number of fields that were successfully converted and assigned
-        int assigned = sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
+        // int assigned = sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
+        sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
         printf("Requested size range: %llu - %llu\n", minSize, maxSize);
 
-        char cwd[PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)) != NULL)
-        {
-            printf("Current working dir: %s\n", cwd);
-        }
-        else
-        {
-            perror("getcwd() error");
-            return 1;
-        }
-        const char *directoryPath = cwd; // Replace with the desired directory path
         // unsigned long long minSize = 0; // Minimum file size in bytes
         // unsigned long long maxSize = 1000; // Maximum file size in bytes
 
-        findFilesInSizeRange(directoryPath, minSize, maxSize);
+        char *fileList = (char *)malloc(1); // Start with an empty string
+        if (fileList == NULL)
+        {
+            perror("malloc");
+            return EXIT_FAILURE;
+        }
+        fileList[0] = '\0';
+
+        findFilesInSizeRange(minSize, maxSize, &fileList);
+
+        // Create a temporary file to store the list of files
+        char tmpFilePath[] = "/tmp/file_list.txt";
+        int tmpFile = open(tmpFilePath, O_CREAT | O_WRONLY, 0644);
+        if (tmpFile == -1)
+        {
+            perror("open");
+            free(fileList);
+            return EXIT_FAILURE;
+        }
+        write(tmpFile, fileList, strlen(fileList));
+        close(tmpFile);
+
+        // Create tar.gz archive
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            chdir("."); // Change to the current directory
+            execlp("tar", "tar", "-czvf", "temp.tar.gz", "-T", tmpFilePath, NULL);
+            perror("execlp");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid > 0)
+        {
+            wait(NULL);
+        }
+        else
+        {
+            perror("fork");
+            free(fileList);
+            return EXIT_FAILURE;
+        }
+
+        printf("Tar.gz archive created: temp.tar.gz\n");
+
+        // Delete the temporary file
+        if (unlink(tmpFilePath) != 0)
+        {
+            perror("unlink");
+        }
+
+        free(fileList);
     }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
@@ -140,9 +185,9 @@ void processClient(int client_sd)
     }
 }
 
-void findFilesInSizeRange(const char *dirPath, unsigned long long minSize, unsigned long long maxSize)
+void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList)
 {
-    DIR *dir = opendir(dirPath);
+    DIR *dir = opendir(".");
     if (dir == NULL)
     {
         perror("opendir");
@@ -152,34 +197,42 @@ void findFilesInSizeRange(const char *dirPath, unsigned long long minSize, unsig
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL)
     {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-        {
-            continue; // Skip "." and ".." directories
-        }
+        if (entry->d_type == DT_REG)
+        { // Regular file
+            char filePath[256];
+            snprintf(filePath, sizeof(filePath), "./%s", entry->d_name);
 
-        char filePath[256];
-        snprintf(filePath, sizeof(filePath), "%s/%s", dirPath, entry->d_name);
-
-        struct stat fileStat;
-        if (stat(filePath, &fileStat) == 0)
-        {
-            // checking if file is a regular file and within the defined size range
-            if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
+            struct stat fileStat;
+            if (stat(filePath, &fileStat) == 0)
             {
-                printf("File: %s, Size: %lld bytes\n", filePath, (long long)fileStat.st_size);
+                if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
+                {
+                    appendFilePath(fileList, entry->d_name);
+                }
             }
-            else if (S_ISDIR(fileStat.st_mode))
+            else
             {
-                findFilesInSizeRange(filePath, minSize, maxSize); // Recurse into subdirectory
+                perror("stat");
             }
-        }
-        else
-        {
-            perror("stat");
         }
     }
 
     closedir(dir);
+}
+
+void appendFilePath(char **fileList, const char *filePath)
+{
+    size_t currentSize = strlen(*fileList);
+    size_t filePathSize = strlen(filePath);
+    char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
+    if (newList == NULL)
+    {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+    }
+    *fileList = newList;
+    strcat(*fileList, filePath);
+    strcat(*fileList, "\n");
 }
 
 int main(int argc, char *argv[])
