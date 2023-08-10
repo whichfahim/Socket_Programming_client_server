@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 
-void processclient(int client_sd)
+void processClient(int client_sd)
 {
     printf("Message from the client\n");
     char buff1[50];
@@ -23,8 +23,8 @@ void processclient(int client_sd)
     {
         
         //execute fgets command
-                const char *command = buff1 + 6; // Extract the command after "fgets "
-        		printf("Client entered: fgets %s",command);
+                //const char *command = buff1 + 6; // Extract the command after "fgets "
+        		//printf("Client entered: fgets %s",command);
         		//iterate through list of files
         				
         			//check if file exists
@@ -34,6 +34,67 @@ void processclient(int client_sd)
         					//make a tar of the file and send it to the client
         				//else
         					//printf this file does not exist
+        const char *file_list = buff1 + 6; // Extract the list of files from the command
+        char *token = strtok(file_list, " \n"); // Tokenize by space and newline
+        
+        int files_found = 0;
+        while (token != NULL) {
+            // Search for files in the server's directory
+            char file_path[1024];
+            snprintf(file_path, sizeof(file_path), "./%s", token); // Use "./" for current directory
+
+            FILE *file = fopen(file_path, "rb");
+            if (file) {
+                files_found++;
+                fclose(file);
+            }
+
+            token = strtok(NULL, " \n");
+        }
+
+        if (files_found > 0) {
+            printf("Files found: %d\n", files_found);
+            // Implement the logic to create tar.gz and send it to the client
+            // Create a tar archive with up to 4 files
+            char tar_command[1024];
+            char file_list_str[1024];
+            file_list_str[0] = '\0';
+
+            for (int i = 0; i < file_count; i++) {
+                strcat(file_list_str, file_args[i]);
+                strcat(file_list_str, " ");
+            }
+
+            snprintf(tar_command, sizeof(tar_command), "tar -cf temp.tar %s", file_list_str);
+            system(tar_command);
+
+            // Compress the tar archive into tar.gz
+            char gzip_command[1024];
+            snprintf(gzip_command, sizeof(gzip_command), "gzip -c temp.tar > temp.tar.gz");
+            system(gzip_command);
+
+            // Send the tar.gz file to the client
+            FILE *tar_file = fopen("temp.tar.gz", "rb");
+            if (tar_file) {
+                fseek(tar_file, 0, SEEK_END);
+                long tar_size = ftell(tar_file);
+                rewind(tar_file);
+
+                char *tar_buffer = (char *)malloc(tar_size);
+                fread(tar_buffer, 1, tar_size, tar_file);
+                fclose(tar_file);
+
+                send(client_sd, tar_buffer, tar_size, 0);
+
+                free(tar_buffer);
+            } else {
+                const char *error_msg = "Error creating tar.gz file";
+                send(client_sd, error_msg, strlen(error_msg), 0);
+            }
+        } else {
+            const char *not_found_msg = "No file found";
+            send(client_sd, not_found_msg, strlen(not_found_msg), 0);
+        }
     }
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
@@ -130,7 +191,7 @@ int main(int argc, char *argv[])
             // Close listening socket in child
             close(lis_sd);
 
-            processclient(con_sd);
+            processClient(con_sd);
 
             close(con_sd);
 
