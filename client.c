@@ -45,22 +45,21 @@ int main(int argc, char *argv[])
     }
 
     /*
-    if (read(client_sd, message, 100)<0){//read()
-        fprintf(stderr, "read() error\n");
-        exit(3);
-    }
 
-
-
-    fprintf(stderr, "%s\n", message);
     */
 
     char buff[50];
     printf("\nEnter the message to be sent to the server\n");
     // scanf("%s",&buff);
     gets(&buff);
-    printf("Sending message: %s\n", buff); // Print the contents of buff before writing
+    // printf("Sending message: %s\n", buff); // Print the contents of buff before writing
     write(client_sd, buff, 100);
 
+    if (read(client_sd, message, 100) < 0)
+    { // read()
+        fprintf(stderr, "read() error\n");
+        exit(3);
+    }
+    fprintf(stderr, "%s\n", message);
     exit(0);
 }
