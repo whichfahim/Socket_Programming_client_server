@@ -9,6 +9,10 @@
 #include <dirent.h>
 #include <fcntl.h>
 
+/*
+    CLIENT COMMANDS
+    ===============
+*/
 void fgets_command(int client_sd, char buff1[])
 {
     const char *file_list = buff1 + 6; // Extract the list of files from the command
@@ -88,6 +92,7 @@ void fgets_command(int client_sd, char buff1[])
     }
 }
 
+// =======TARFGETZ SIZE1 SIZE2===========
 void tarfgetz(int client_sd, char buff1[])
 {
 
@@ -173,24 +178,18 @@ void tarfgetz(int client_sd, char buff1[])
 void filesrch(int client_sd, char buff1[])
 {
     const char *filename = buff1 + 9; // Extract the filename from the command
-    printf("Requested file: %s", filename);
-    // Check if the file exists
-    struct stat file_stat;
-    if (stat(filename, &file_stat) == 0 && S_ISREG(file_stat.st_mode))
-    {
-        char response[1024];
-        snprintf(response, sizeof(response), "File: %s\nSize: %ld bytes\nDate Created: %s", filename, file_stat.st_size, ctime(&file_stat.st_ctime));
-        // send(client_sd, response, strlen(response), 0);
-        write(client_sd, response, 1024);
-    }
-    else
-    {
-        // const char *not_found_msg = "File not found";
-        // send(client_sd, not_found_msg, strlen(not_found_msg), 0);
-        char *msg = "File not found";
+    printf("Requested file: %s\n", filename);
 
-        write(client_sd, msg, 50);
-    }
+    // Get the user's home directory
+    const char *home_dir = getenv("HOME");
+    printf("Searching directory tree rooted at: %s\n", home_dir);
+
+    // Recursively search the home directory for the file
+    searchDirectory(client_sd, home_dir, filename);
+
+    // File not found
+    char *msg = "File not found";
+    write(client_sd, msg, 100);
 }
 
 void processClient(int client_sd)
@@ -239,6 +238,48 @@ void processClient(int client_sd)
     {
         // code here
     }
+}
+
+// ==== UTILITY METHODS =====
+void searchDirectory(int client_sd, const char *search_path, const char *filename)
+{
+    DIR *dir = opendir(search_path);
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char filepath[1024];
+        snprintf(filepath, sizeof(filepath), "%s/%s", search_path, entry->d_name);
+
+        struct stat file_stat;
+        if (stat(filepath, &file_stat) == 0)
+        {
+            if (S_ISDIR(file_stat.st_mode))
+            {
+                // Recurse into subdirectory
+                searchDirectory(client_sd, filepath, filename);
+            }
+            else if (S_ISREG(file_stat.st_mode) && strcmp(entry->d_name, filename) == 0)
+            {
+                // File found
+                char response[1024];
+                snprintf(response, sizeof(response), "File: %s\nSize: %ld bytes\nDate Created: %s", filepath, file_stat.st_size, ctime(&file_stat.st_ctime));
+                write(client_sd, response, 1024);
+                closedir(dir);
+                return;
+            }
+        }
+    }
+
+    closedir(dir);
 }
 
 void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList)
