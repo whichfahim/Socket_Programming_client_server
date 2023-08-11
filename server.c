@@ -11,17 +11,6 @@
 
 void fgets_command(int client_sd, char buff1[])
 {
-    // const char *command = buff1 + 6; // Extract the command after "fgets "
-    // printf("Client entered: fgets %s",command);
-    // iterate through list of files
-
-    // check if file exists
-
-    // if -e then
-    // search for file in home directory
-    // make a tar of the file and send it to the client
-    // else
-    // printf this file does not exist
     const char *file_list = buff1 + 6; // Extract the list of files from the command
     printf("List of files: %s\n", file_list);
 
@@ -30,16 +19,31 @@ void fgets_command(int client_sd, char buff1[])
     int file_count = 0;
     char file_list_str[1024] = ""; // Buffer to store the file list
 
-    // takes up to 4 files as parameters
+    // Takes up to 4 files as parameters
     while (file_token != NULL && file_count <= 4)
     {
-        // concatenate file_list_str with file_token
-        strcat(file_list_str, file_token);
-        // insert space in between
-        strcat(file_list_str, " ");
+        // Check if the file exists
+        if (access(file_token, F_OK) != -1)
+        {
+            // Concatenate file_list_str with file_token
+            strcat(file_list_str, file_token);
+            // Insert space in between
+            strcat(file_list_str, " ");
+
+            // only increment count if file exists
+            file_count++;
+        }
+        else
+        {
+            // printf("File not found: %s\n", file_token);
+            char msg[100];
+            sprintf(msg, "File not found: %s\n", file_token);
+            // send(client_sd, msg, strlen(not_found_msg), 0);
+
+            write(client_sd, msg, 100);
+        }
 
         file_token = strtok(NULL, " ");
-        file_count++;
     }
 
     if (file_count > 0)
@@ -48,7 +52,6 @@ void fgets_command(int client_sd, char buff1[])
 
         // Create a tar archive of all the files
         char tar_command[1024];
-        // snprintf(tar_command, sizeof(tar_command), "tar -cf temp.tar %s", file_list_str);
         snprintf(tar_command, sizeof(tar_command), "tar -czf temp.tar.gz %s", file_list_str);
 
         system(tar_command);
@@ -78,12 +81,14 @@ void fgets_command(int client_sd, char buff1[])
     }
     else
     {
-        const char *not_found_msg = "No file found";
-        send(client_sd, not_found_msg, strlen(not_found_msg), 0);
+        // const char *not_found_msg = "No file found";
+        char *msg = "No files found";
+
+        write(client_sd, msg, 50);
     }
 }
 
-void tarfgetz(char buff1[])
+void tarfgetz(int client_sd, char buff1[])
 {
 
     // code here
@@ -156,15 +161,41 @@ void tarfgetz(char buff1[])
     }
     else
     {
-        printf("Wrong input format.\n");
-        printf("Usage: tarfgetz minSize maxSize\n");
-        printf("Where, minSize<maxSize");
+        char *msg = "Usage: tarfgetz minSize maxSize";
+
+        write(client_sd, msg, 50);
+        // printf("Wrong input format.\n");
+        // printf("Usage: tarfgetz minSize maxSize\n");
+        // printf("Where, minSize<maxSize");
+    }
+}
+
+void filesrch(int client_sd, char buff1[])
+{
+    const char *filename = buff1 + 9; // Extract the filename from the command
+    printf("Requested file: %s", filename);
+    // Check if the file exists
+    struct stat file_stat;
+    if (stat(filename, &file_stat) == 0 && S_ISREG(file_stat.st_mode))
+    {
+        char response[1024];
+        snprintf(response, sizeof(response), "File: %s\nSize: %ld bytes\nDate Created: %s", filename, file_stat.st_size, ctime(&file_stat.st_ctime));
+        // send(client_sd, response, strlen(response), 0);
+        write(client_sd, response, 1024);
+    }
+    else
+    {
+        // const char *not_found_msg = "File not found";
+        // send(client_sd, not_found_msg, strlen(not_found_msg), 0);
+        char *msg = "File not found";
+
+        write(client_sd, msg, 50);
     }
 }
 
 void processClient(int client_sd)
 {
-    printf("Message from the client\n");
+    // printf("Message from the client\n");
     char buff1[1024];
     ssize_t bytes_read = read(client_sd, buff1, sizeof(buff1) - 1);
 
@@ -176,7 +207,7 @@ void processClient(int client_sd)
     }
 
     buff1[bytes_read] = '\0';
-    printf("Client command: %s\n", buff1);
+    // printf("Client command: %s\n", buff1);
 
     if (strcmp(buff1, "quit") == 0)
     {
@@ -189,14 +220,16 @@ void processClient(int client_sd)
         // execute fgets command
         fgets_command(client_sd, buff1);
     }
+    // compare first 8 characters of buff1 with "tarfgetz"
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
         // execute tarfgetz command
-        tarfgetz(buff1);
+        tarfgetz(client_sd, buff1);
     }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
         // code here
+        filesrch(client_sd, buff1);
     }
     else if (strncmp(buff1, "targzf ", 6) == 0)
     {
@@ -206,6 +239,56 @@ void processClient(int client_sd)
     {
         // code here
     }
+}
+
+void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList)
+{
+    DIR *dir = opendir(".");
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (entry->d_type == DT_REG)
+        { // Regular file
+            char filePath[256];
+            snprintf(filePath, sizeof(filePath), "./%s", entry->d_name);
+
+            struct stat fileStat;
+            if (stat(filePath, &fileStat) == 0)
+            {
+                if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
+                {
+                    appendFilePath(fileList, entry->d_name);
+                }
+            }
+            else
+            {
+                perror("stat");
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
+void appendFilePath(char **fileList, const char *filePath)
+{
+    size_t currentSize = strlen(*fileList);
+    size_t filePathSize = strlen(filePath);
+    char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
+    if (newList == NULL)
+    {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+    }
+    *fileList = newList;
+    strcat(*fileList, filePath);
+    strcat(*fileList, "\n");
 }
 
 int main(int argc, char *argv[])
