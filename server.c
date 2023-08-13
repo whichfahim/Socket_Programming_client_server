@@ -3,12 +3,192 @@
 #include <stdlib.h>
 #include <sys/socket.h> //for socket APIs
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 
+// ==== UTILITY METHODS =====
+void searchDirectory(int client_sd, const char *search_path, const char *filename)
+{
+    DIR *dir = opendir(search_path);
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        // continue execution if directory name is "." or ".." meaning
+        // ignore the current and the directory "above"
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char filepath[1024];
+
+        // basically append the directory name to the filepath, i.e. path/to/directory/dirname
+        snprintf(filepath, sizeof(filepath), "%s/%s", search_path, entry->d_name);
+
+        struct stat file_stat;
+        // check if file exists
+        if (stat(filepath, &file_stat) == 0)
+        {
+            // check if file is a directory
+            if (S_ISDIR(file_stat.st_mode))
+            {
+                // call searchDirectory recursively to parse through each directory
+                searchDirectory(client_sd, filepath, filename);
+            }
+            else if (S_ISREG(file_stat.st_mode) && strcmp(entry->d_name, filename) == 0)
+            {
+                // if filesrch
+                //  File found
+                char response[1024];
+                snprintf(response, sizeof(response), "File: %s\nSize: %ld bytes\nDate Created: %s", filepath, file_stat.st_size, ctime(&file_stat.st_ctime));
+                write(client_sd, response, 1024);
+                /*
+                //if targzf
+                // Check if the file has a matching extension
+                const char *file_extension = strrchr(entry->d_name, '.');
+                if (file_extension != NULL)
+                {
+                    for (int i = 0; i < extension_count; i++)
+                    {
+                        if (strcmp(file_extension, extension_list[i]) == 0)
+                        {
+                            // Write the file path to the file_list_file
+                            fprintf(file_list_file, "%s\n", file_path);
+                            break;
+                        }
+                    }
+                }
+                */
+                closedir(dir);
+                return;
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
+void appendFilePath(char **fileList, const char *filePath)
+{
+    size_t currentSize = strlen(*fileList);
+    size_t filePathSize = strlen(filePath);
+    // reallocates memory to accommodate the new file path
+    // resize the memory block pointed to by *fileList
+    char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
+    if (newList == NULL)
+    {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+    }
+    // update the fileList pointer to point to the new memory block
+    *fileList = newList;
+    strcat(*fileList, filePath);
+    strcat(*fileList, "\n");
+}
+
+void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList)
+{
+    DIR *dir = opendir(".");
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (entry->d_type == DT_REG)
+        { // Regular file
+            char filePath[256];
+            snprintf(filePath, sizeof(filePath), "./%s", entry->d_name);
+
+            struct stat fileStat;
+            if (stat(filePath, &fileStat) == 0)
+            {
+                if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
+                {
+                    appendFilePath(fileList, entry->d_name);
+                }
+            }
+            else
+            {
+                perror("stat");
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
+void searchAndWriteFiles(FILE *file_list, const char *path, const char *extensions)
+{
+    DIR *dir = opendir(path);
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    // printf("path: %s",dir);
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        /*
+        if (snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name) >= sizeof(full_path)) {
+            fprintf(stderr, "Full path is too long: %s/%s\n", path, entry->d_name);
+            continue;
+        }
+        */
+
+        // printf("full path: %s",full_path);
+
+        struct stat entry_stat;
+        if (stat(full_path, &entry_stat) != 0)
+        {
+            perror("stat");
+            continue;
+        }
+
+        if (S_ISDIR(entry_stat.st_mode))
+        {
+            searchAndWriteFiles(file_list, full_path, extensions);
+        }
+        else
+        {
+            if (S_ISREG(entry_stat.st_mode))
+            {
+                char *ext = strrchr(entry->d_name, '.');
+                if (ext != NULL && strstr(extensions, ext))
+                {
+                    fprintf(file_list, "%s\n", full_path);
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
+>>>>>>> Stashed changes
 /*
     CLIENT COMMANDS
     ===============
@@ -118,7 +298,7 @@ void tarfgetz(int client_sd, char buff1[])
         if (fileList == NULL)
         {
             perror("malloc");
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
         }
         fileList[0] = '\0';
 
@@ -131,7 +311,7 @@ void tarfgetz(int client_sd, char buff1[])
         {
             perror("open");
             free(fileList);
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
         }
         write(tmpFile, fileList, strlen(fileList));
         close(tmpFile);
@@ -153,7 +333,7 @@ void tarfgetz(int client_sd, char buff1[])
         {
             perror("fork");
             free(fileList);
-            return EXIT_FAILURE;
+            exit(EXIT_FAILURE);
         }
 
         printf("Tar.gz archive created: temp.tar.gz\n");
@@ -240,7 +420,12 @@ void targzf(int client_sd, char buff1[])
         const char *error_msg = "Error creating tar.gz file";
         send(client_sd, error_msg, strlen(error_msg), 0);
     }
+<<<<<<< Updated upstream
 
+    == == == =
+                 const char *msg = "Finished tarring files.";
+    write(client_sd, msg, strlen(msg));
+>>>>>>> Stashed changes
     // Clean up
     remove("file_list.txt");
 }
