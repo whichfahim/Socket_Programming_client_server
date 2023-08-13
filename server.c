@@ -195,66 +195,7 @@ void filesrch(int client_sd, char buff1[])
     write(client_sd, msg, 100);
 }
 
-//=====processClient=======
-// main method for processing client requests
-void processClient(int client_sd)
-{
-    // printf("Message from the client\n");
-    char buff1[1024];
-    ssize_t bytes_read = read(client_sd, buff1, sizeof(buff1) - 1);
-
-    if (bytes_read <= 0)
-    {
-        perror("read");
-        close(client_sd);
-        return;
-    }
-
-    buff1[bytes_read] = '\0';
-    // printf("Client command: %s\n", buff1);
-
-    if (strcmp(buff1, "quit") == 0)
-    {
-        printf("Quitting...");
-        // break;
-    }
-    // compare the first 6 characters with "fgets"
-    else if (strncmp(buff1, "fgets ", 6) == 0)
-    {
-        // execute fgets command
-        fgets_command(client_sd, buff1);
-    }
-    // compare first 8 characters of buff1 with "tarfgetz"
-    else if (strncmp(buff1, "tarfgetz ", 8) == 0)
-    {
-        // execute tarfgetz command
-        tarfgetz(client_sd, buff1);
-    }
-    else if (strncmp(buff1, "filesrch ", 8) == 0)
-    {
-        // code here
-        filesrch(client_sd, buff1);
-    }
-    else if (strncmp(buff1, "targzf ", 6) == 0)
-    {
-        // code here
-        const char *extension_list = buff1 + 6; // Extract the list of files from the command
-        printf("List of extensions: %s\n", extension_list);
-
-        targzf(client_sd, buff1);
-        /*
-        // Tokenize the file list by space
-        char *file_token = strtok(file_list, " ");
-        int file_count = 0;
-        char file_list_str[1024] = ""; // Buffer to store the file list
-        */
-    }
-    else if (strncmp(buff1, "getdirf ", 7) == 0)
-    {
-        // code here
-    }
-}
-
+//======targzf <extension list> <-u>====
 void targzf(int client_sd, char buff1[])
 {
     const char *extension_list = buff1 + 7; // Extract the extension list from the command
@@ -302,6 +243,68 @@ void targzf(int client_sd, char buff1[])
 
     // Clean up
     remove("file_list.txt");
+}
+
+/*
+//=====processClient=======
+main method for processing client requests
+*/
+void processClient(int client_sd)
+{
+    // printf("Message from the client\n");
+    char buff1[1024];
+    ssize_t bytes_read = read(client_sd, buff1, sizeof(buff1) - 1);
+
+    if (bytes_read <= 0)
+    {
+        perror("read");
+        close(client_sd);
+        return;
+    }
+
+    buff1[bytes_read] = '\0';
+    // printf("Client command: %s\n", buff1);
+
+    if (strcmp(buff1, "quit") == 0)
+    {
+        printf("Quitting...");
+        // break;
+    }
+    // compare the first 6 characters with "fgets"
+    else if (strncmp(buff1, "fgets ", 6) == 0)
+    {
+        // execute fgets command
+        fgets_command(client_sd, buff1);
+    }
+    // compare first 8 characters of buff1 with "tarfgetz"
+    else if (strncmp(buff1, "tarfgetz ", 8) == 0)
+    {
+        // execute tarfgetz command
+        tarfgetz(client_sd, buff1);
+    }
+    else if (strncmp(buff1, "filesrch ", 8) == 0)
+    {
+        // code here
+        filesrch(client_sd, buff1);
+    }
+    else if (strncmp(buff1, "targzf ", 6) == 0)
+    {
+        // code here
+        // const char *extension_list = buff1 + 6; // Extract the list of files from the command
+        // printf("List of extensions: %s\n", extension_list);
+
+        targzf(client_sd, buff1);
+        /*
+        // Tokenize the file list by space
+        char *file_token = strtok(file_list, " ");
+        int file_count = 0;
+        char file_list_str[1024] = ""; // Buffer to store the file list
+        */
+    }
+    else if (strncmp(buff1, "getdirf ", 7) == 0)
+    {
+        // code here
+    }
 }
 
 // ==== UTILITY METHODS =====
@@ -409,12 +412,15 @@ void appendFilePath(char **fileList, const char *filePath)
 {
     size_t currentSize = strlen(*fileList);
     size_t filePathSize = strlen(filePath);
+    // reallocates memory to accommodate the new file path
+    // resize the memory block pointed to by *fileList
     char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
     if (newList == NULL)
     {
         perror("realloc");
         exit(EXIT_FAILURE);
     }
+    // update the fileList pointer to point to the new memory block
     *fileList = newList;
     strcat(*fileList, filePath);
     strcat(*fileList, "\n");
@@ -453,10 +459,13 @@ void searchAndWriteFiles(FILE *file_list, const char *path, const char *extensio
         }
         else
         {
-            char *ext = strrchr(entry->d_name, '.');
-            if (ext != NULL && strstr(extensions, ext))
+            if (S_ISREG(entry_stat.st_mode))
             {
-                fprintf(file_list, "%s\n", full_path);
+                char *ext = strrchr(entry->d_name, '.');
+                if (ext != NULL && strstr(extensions, ext))
+                {
+                    fprintf(file_list, "%s\n", full_path);
+                }
             }
         }
     }
