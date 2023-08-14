@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <sys/socket.h> //for socket APIs
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -61,6 +62,7 @@ void searchFiles(char *file_list_str, const char *path, const char *filename, in
     ===============
 */
 
+//=====fgets file1 file2 file3 file4========
 void fgets_command(int client_sd, char buff1[])
 {
     char *file_list = buff1 + 6; // Extract the list of files from the command
@@ -76,7 +78,6 @@ void fgets_command(int client_sd, char buff1[])
         searchFiles(file_list_str, getenv("HOME"), file_token, &file_count);
 
         file_token = strtok(NULL, " ");
-        file_count++;
     }
 
     if (file_count > 0)
@@ -85,9 +86,10 @@ void fgets_command(int client_sd, char buff1[])
 
         // Create a tar archive of all the files
         char tar_command[1024];
-        // snprintf(tar_command, sizeof(tar_command), "tar -cf temp.tar %s", file_list_str);
         snprintf(tar_command, sizeof(tar_command), "tar -czf temp.tar.gz %s", file_list_str);
 
+        const char *home_dir = getenv("HOME");
+        chdir(home_dir); // Change to home directory
         system(tar_command);
 
         // Send the tar archive to the client
@@ -128,7 +130,7 @@ main method for processing client requests
 */
 void processClient(int client_sd)
 {
-    printf("Message from the client\n");
+    // printf("Message from the client\n");
     char buff1[1024];
     ssize_t bytes_read = read(client_sd, buff1, sizeof(buff1) - 1);
 
@@ -153,17 +155,30 @@ void processClient(int client_sd)
         // execute fgets command
         fgets_command(client_sd, buff1);
     }
+    // compare first 8 characters of buff1 with "tarfgetz"
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
         // execute tarfgetz command
+        // tarfgetz(client_sd, buff1);
     }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
         // code here
+        // filesrch(client_sd, buff1);
     }
     else if (strncmp(buff1, "targzf ", 6) == 0)
     {
         // code here
+        // const char *extension_list = buff1 + 6; // Extract the list of files from the command
+        // printf("List of extensions: %s\n", extension_list);
+
+        targzf(client_sd, buff1);
+        /*
+        // Tokenize the file list by space
+        char *file_token = strtok(file_list, " ");
+        int file_count = 0;
+        char file_list_str[1024] = ""; // Buffer to store the file list
+        */
     }
     else if (strncmp(buff1, "getdirf ", 7) == 0)
     {
