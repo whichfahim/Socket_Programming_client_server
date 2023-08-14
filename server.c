@@ -112,74 +112,7 @@ void processClient(int client_sd)
     }
     else if (strncmp(buff1, "fgets ", 6) == 0)
     {
-
         // execute fgets command
-        // const char *command = buff1 + 6; // Extract the command after "fgets "
-        // printf("Client entered: fgets %s",command);
-        // iterate through list of files
-
-        // check if file exists
-
-        // if -e then
-        // search for file in home directory
-        // make a tar of the file and send it to the client
-        // else
-        // printf this file does not exist
-        const char *file_list = buff1 + 6; // Extract the list of files from the command
-        printf("List of files: %s\n", file_list);
-
-        // Tokenize the file list by space
-        char *file_token = strtok(file_list, " ");
-        int file_count = 0;
-        char file_list_str[1024] = ""; // Buffer to store the file list
-
-        while (file_token != NULL && file_count <= 4)
-        {
-            strcat(file_list_str, file_token);
-            strcat(file_list_str, " ");
-            file_token = strtok(NULL, " ");
-            file_count++;
-        }
-
-        if (file_count > 0)
-        {
-            printf("Files found: %d\n", file_count);
-
-            // Create a tar archive of all the files
-            char tar_command[1024];
-            // snprintf(tar_command, sizeof(tar_command), "tar -cf temp.tar %s", file_list_str);
-            snprintf(tar_command, sizeof(tar_command), "tar -czf temp.tar.gz %s", file_list_str);
-
-            system(tar_command);
-
-            // Send the tar archive to the client
-            FILE *tar_file = fopen("temp.tar.gz", "rb");
-
-            if (tar_file)
-            {
-                fseek(tar_file, 0, SEEK_END);
-                long tar_size = ftell(tar_file);
-                rewind(tar_file);
-
-                char *tar_buffer = (char *)malloc(tar_size);
-                fread(tar_buffer, 1, tar_size, tar_file);
-                fclose(tar_file);
-
-                send(client_sd, tar_buffer, tar_size, 0);
-
-                free(tar_buffer);
-            }
-            else
-            {
-                const char *error_msg = "Error creating tar.gz file";
-                send(client_sd, error_msg, strlen(error_msg), 0);
-            }
-        }
-        else
-        {
-            const char *not_found_msg = "No file found";
-            send(client_sd, not_found_msg, strlen(not_found_msg), 0);
-        }
     }
     // compare first 8 characters of buff1 with "tarfgetz"
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
