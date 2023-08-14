@@ -156,8 +156,7 @@ void processClient(int client_sd)
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
         // execute tarfgetz command
-        tarfgetz(buff1);
-    }
+        }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
         // code here
