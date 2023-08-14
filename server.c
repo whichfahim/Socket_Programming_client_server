@@ -13,6 +13,56 @@
 #include <arpa/inet.h>
 
 // ==== UTILITY METHODS =====
+void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList)
+{
+    DIR *dir = opendir(".");
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (entry->d_type == DT_REG)
+        { // Regular file
+            char filePath[256];
+            snprintf(filePath, sizeof(filePath), "./%s", entry->d_name);
+
+            struct stat fileStat;
+            if (stat(filePath, &fileStat) == 0)
+            {
+                if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
+                {
+                    appendFilePath(fileList, entry->d_name);
+                }
+            }
+            else
+            {
+                perror("stat");
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
+void appendFilePath(char **fileList, const char *filePath)
+{
+    size_t currentSize = strlen(*fileList);
+    size_t filePathSize = strlen(filePath);
+    char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
+    if (newList == NULL)
+    {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+    }
+    *fileList = newList;
+    strcat(*fileList, filePath);
+    strcat(*fileList, "\n");
+}
+
 void searchFiles(char *file_list_str, const char *path, const char *filename, int *file_count)
 {
     DIR *dir = opendir(path);
@@ -158,8 +208,7 @@ void processClient(int client_sd)
     // compare first 8 characters of buff1 with "tarfgetz"
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
-        // execute tarfgetz command
-        // tarfgetz(client_sd, buff1);
+        tarfgetz(buff1);
     }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
