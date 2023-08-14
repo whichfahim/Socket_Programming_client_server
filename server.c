@@ -13,9 +13,9 @@
 #include <arpa/inet.h>
 
 // ==== UTILITY METHODS =====
-void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList)
+void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList, const char *searchPath)
 {
-    DIR *dir = opendir(".");
+    DIR *dir = opendir(searchPath);
     if (dir == NULL)
     {
         perror("opendir");
@@ -25,23 +25,30 @@ void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL)
     {
-        if (entry->d_type == DT_REG)
-        { // Regular file
-            char filePath[256];
-            snprintf(filePath, sizeof(filePath), "./%s", entry->d_name);
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
 
-            struct stat fileStat;
-            if (stat(filePath, &fileStat) == 0)
+        char filePath[256];
+        snprintf(filePath, sizeof(filePath), "%s/%s", searchPath, entry->d_name);
+
+        struct stat fileStat;
+        if (stat(filePath, &fileStat) == 0)
+        {
+            if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
             {
-                if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
-                {
-                    appendFilePath(fileList, entry->d_name);
-                }
+                appendFilePath(fileList, filePath);
             }
-            else
+            else if (S_ISDIR(fileStat.st_mode))
             {
-                perror("stat");
+                // Recursively search subdirectories
+                findFilesInSizeRange(minSize, maxSize, fileList, filePath);
             }
+        }
+        else
+        {
+            perror("stat");
         }
     }
 
@@ -174,6 +181,115 @@ void fgets_command(int client_sd, char buff1[])
     }
 }
 
+// =======tarfgetz size1 size2 <-u>===========
+void tarfgetz(int client_sd, char buff1[])
+{
+
+    // code here
+    unsigned long long minSize, maxSize;
+    const char *home_dir = getenv("HOME");
+    int unzip = 0; // Default is not to unzip
+
+    // Check if -u flag is provided
+    // char *strstr(const char *haystack, const char *needle)
+    if (strstr(buff1, " -u") != NULL)
+    {
+        // printf("-u flag found.");
+        unzip = 1;
+    }
+
+    // returns the number of fields that were successfully converted and assigned
+    int assigned = sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
+
+    // validation for client input
+    if (assigned >= 2 && minSize <= maxSize)
+    {
+        // only perform these operations if command format is accurate
+        sscanf(buff1 + 9, "%llu %llu", &minSize, &maxSize);
+        printf("Requested size range: %llu - %llu\n", minSize, maxSize);
+
+        // unsigned long long minSize = 0; // Minimum file size in bytes
+        // unsigned long long maxSize = 1000; // Maximum file size in bytes
+
+        char *fileList = (char *)malloc(1); // Start with an empty string
+        if (fileList == NULL)
+        {
+            perror("malloc");
+            exit(EXIT_FAILURE);
+        }
+        fileList[0] = '\0';
+
+        findFilesInSizeRange(minSize, maxSize, &fileList, home_dir);
+
+        // Create a temporary file to store the list of files
+        char tmpFilePath[] = "/tmp/file_list.txt";
+        int tmpFile = open(tmpFilePath, O_CREAT | O_WRONLY, 0644);
+        if (tmpFile == -1)
+        {
+            perror("open");
+            free(fileList);
+            exit(EXIT_FAILURE);
+        }
+        write(tmpFile, fileList, strlen(fileList));
+        close(tmpFile);
+
+        // Create tar.gz archive
+        pid_t pid = fork();
+        if (pid == 0)
+        {
+            // in the child process
+            chdir(home_dir); // Change to home directory
+
+            // Create the tar.gz archive
+            char *tmpFilePath = "/tmp/file_list.txt";
+            execlp("tar", "tar", "-czvf", "temp.tar.gz", "-T", tmpFilePath, NULL);
+
+            perror("execlp");
+            exit(EXIT_FAILURE);
+        }
+        else if (pid > 0)
+        {
+            wait(NULL); // wait for child process to finish
+            if (unzip)
+            {
+                // Unzip the tar.gz archive in the client's home directory
+
+                char unzip_command[1024];
+                snprintf(unzip_command, sizeof(unzip_command), "tar -xzvf temp.tar.gz -C %s", home_dir);
+                // invokes the default shell commands are read from string
+                execlp("sh", "sh", "-c", unzip_command, NULL);
+            }
+        }
+        else
+        {
+            perror("fork");
+            free(fileList);
+            exit(EXIT_FAILURE);
+        }
+
+        char *msg = "Finished tarring files";
+        write(client_sd, msg, strlen(msg) + 1);
+        // printf("Tar.gz archive created: temp.tar.gz\n");
+
+        // Delete the temporary file
+        if (unlink(tmpFilePath) != 0)
+        {
+            perror("unlink");
+        }
+
+        free(fileList);
+    }
+    else
+    {
+        char *msg = "Usage: tarfgetz minSize maxSize";
+
+        write(client_sd, msg, 50);
+        // printf("Wrong input format.\n");
+        // printf("Usage: tarfgetz minSize maxSize\n");
+        // printf("Where, minSize<maxSize");
+    }
+}
+
 /*
 //=====processClient=======
 main method for processing client requests
@@ -208,7 +324,7 @@ void processClient(int client_sd)
     // compare first 8 characters of buff1 with "tarfgetz"
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
-        tarfgetz(buff1);
+        tarfgetz(client_sd, buff1);
     }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
@@ -221,7 +337,7 @@ void processClient(int client_sd)
         // const char *extension_list = buff1 + 6; // Extract the list of files from the command
         // printf("List of extensions: %s\n", extension_list);
 
-        targzf(client_sd, buff1);
+        // targzf(client_sd, buff1);
         /*
         // Tokenize the file list by space
         char *file_token = strtok(file_list, " ");
