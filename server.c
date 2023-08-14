@@ -140,7 +140,7 @@ void processClient(int client_sd)
     }
 
     buff1[bytes_read] = '\0';
-    printf("Client command: %s\n", buff1);
+    // printf("Client command: %s\n", buff1);
 
     if (strcmp(buff1, "quit") == 0)
     {
@@ -156,7 +156,7 @@ void processClient(int client_sd)
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
     {
         // execute tarfgetz command
-        }
+    }
     else if (strncmp(buff1, "filesrch ", 8) == 0)
     {
         // code here
