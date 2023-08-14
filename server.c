@@ -44,7 +44,7 @@ void searchDirectory(int client_sd, const char *search_path, const char *filenam
                 // File found
                 char response[1024];
                 snprintf(response, sizeof(response), "File: %s\nSize: %ld bytes\nDate Created: %s", filepath, file_stat.st_size, ctime(&file_stat.st_ctime));
-                write(client_sd, response, 1024);
+                write(client_sd, response, strlen(response) + 1);
                 closedir(dir);
                 return;
             }
@@ -52,6 +52,21 @@ void searchDirectory(int client_sd, const char *search_path, const char *filenam
     }
 
     closedir(dir);
+}
+
+void appendFilePath(char **fileList, const char *filePath)
+{
+    size_t currentSize = strlen(*fileList);
+    size_t filePathSize = strlen(filePath);
+    char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
+    if (newList == NULL)
+    {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+    }
+    *fileList = newList;
+    strcat(*fileList, filePath);
+    strcat(*fileList, "\n");
 }
 
 void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize, char **fileList, const char *searchPath)
@@ -79,6 +94,7 @@ void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize
         {
             if (S_ISREG(fileStat.st_mode) && fileStat.st_size >= minSize && fileStat.st_size <= maxSize)
             {
+                // concatenates the filePath to the existing fileList
                 appendFilePath(fileList, filePath);
             }
             else if (S_ISDIR(fileStat.st_mode))
@@ -89,26 +105,11 @@ void findFilesInSizeRange(unsigned long long minSize, unsigned long long maxSize
         }
         else
         {
-            perror("stat");
+            // perror("stat");
         }
     }
 
     closedir(dir);
-}
-
-void appendFilePath(char **fileList, const char *filePath)
-{
-    size_t currentSize = strlen(*fileList);
-    size_t filePathSize = strlen(filePath);
-    char *newList = realloc(*fileList, currentSize + filePathSize + 2); // +2 for newline and null terminator
-    if (newList == NULL)
-    {
-        perror("realloc");
-        exit(EXIT_FAILURE);
-    }
-    *fileList = newList;
-    strcat(*fileList, filePath);
-    strcat(*fileList, "\n");
 }
 
 void searchFiles(char *file_list_str, const char *path, const char *filename, int *file_count)
@@ -149,6 +150,64 @@ void searchFiles(char *file_list_str, const char *path, const char *filename, in
             // Insert space in between
             strcat(file_list_str, " ");
             (*file_count)++;
+        }
+    }
+
+    closedir(dir);
+}
+
+// targzf
+void searchAndWriteFiles(FILE *file_list, const char *path, const char *extensions)
+{
+    DIR *dir = opendir(path);
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    // printf("path: %s",dir);
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+        {
+            continue;
+        }
+
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        /*
+        if (snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name) >= sizeof(full_path)) {
+            fprintf(stderr, "Full path is too long: %s/%s\n", path, entry->d_name);
+            continue;
+        }
+        */
+
+        // printf("full path: %s",full_path);
+
+        struct stat entry_stat;
+        if (stat(full_path, &entry_stat) != 0)
+        {
+            // perror("stat");
+            continue;
+        }
+
+        if (S_ISDIR(entry_stat.st_mode))
+        {
+            searchAndWriteFiles(file_list, full_path, extensions);
+        }
+        else
+        {
+            if (S_ISREG(entry_stat.st_mode))
+            {
+                char *ext = strrchr(entry->d_name, '.');
+                if (ext != NULL && strstr(extensions, ext))
+                {
+                    fprintf(file_list, "%s\n", full_path);
+                }
+            }
         }
     }
 
@@ -312,8 +371,11 @@ void tarfgetz(int client_sd, char buff1[])
         write(client_sd, msg, strlen(msg) + 1);
         // printf("Tar.gz archive created: temp.tar.gz\n");
 
-        // Recursively search the home directory for the file
-        searchDirectory(client_sd, home_dir, filename);
+        // Delete the temporary file
+        if (unlink(tmpFilePath) != 0)
+        {
+            perror("unlink");
+        }
 
         free(fileList);
     }
@@ -345,6 +407,57 @@ void filesrch(int client_sd, char buff1[])
     write(client_sd, msg, 100);
 }
 
+//======targzf <extension list> <-u>====
+void targzf(int client_sd, char buff1[])
+{
+    const char *extension_list = buff1 + 7; // Extract the extension list from the command
+    const char *home_dir = getenv("HOME");
+
+    FILE *file_list = fopen("file_list.txt", "w");
+    if (file_list == NULL)
+    {
+        perror("fopen");
+        return;
+    }
+
+    // Recursively search for files with the specified extensions in the home directory
+    searchAndWriteFiles(file_list, home_dir, extension_list);
+
+    fclose(file_list);
+
+    // Create a tar.gz archive from the file list
+    char tar_command[1024];
+    snprintf(tar_command, sizeof(tar_command), "tar -czf temp.tar.gz -T file_list.txt");
+
+    system(tar_command);
+
+    // Send the tar.gz archive to the client
+    FILE *tar_file = fopen("temp.tar.gz", "rb");
+    if (tar_file)
+    {
+        fseek(tar_file, 0, SEEK_END);
+        long tar_size = ftell(tar_file);
+        rewind(tar_file);
+
+        char *tar_buffer = (char *)malloc(tar_size);
+        fread(tar_buffer, 1, tar_size, tar_file);
+        fclose(tar_file);
+        const char *msg = "Finished tarring files.";
+        write(client_sd, msg, strlen(msg) + 1);
+        send(client_sd, tar_buffer, tar_size, 0);
+
+        free(tar_buffer);
+    }
+    else
+    {
+        const char *error_msg = "Error creating tar.gz file";
+        send(client_sd, error_msg, strlen(error_msg), 0);
+    }
+
+    // Clean up
+    remove("file_list.txt");
+}
+
 /*
 //=====processClient=======
 main method for processing client requests
@@ -374,7 +487,7 @@ void processClient(int client_sd)
     else if (strncmp(buff1, "fgets ", 6) == 0)
     {
         // execute fgets command
-        // fgets_command(client_sd, buff1);
+        fgets_command(client_sd, buff1);
     }
     // compare first 8 characters of buff1 with "tarfgetz"
     else if (strncmp(buff1, "tarfgetz ", 8) == 0)
@@ -392,7 +505,7 @@ void processClient(int client_sd)
         // const char *extension_list = buff1 + 6; // Extract the list of files from the command
         // printf("List of extensions: %s\n", extension_list);
 
-        // targzf(client_sd, buff1);
+        targzf(client_sd, buff1);
         /*
         // Tokenize the file list by space
         char *file_token = strtok(file_list, " ");
