@@ -458,6 +458,113 @@ void targzf(int client_sd, char buff1[])
     remove("file_list.txt");
 }
 
+void getdirf(int client_sd, char buff1[])
+{
+    // Extract date1 and date2 from the command
+    char date1[20], date2[20];
+    sscanf(buff1 + 9, "%s %s", date1, date2);
+
+    // Open the client's home directory
+    const char *home_dir = getenv("HOME");
+    DIR *dir = opendir(home_dir);
+    if (dir == NULL)
+    {
+        perror("opendir");
+        return;
+    }
+
+    // Iterate through the directory entries
+    struct dirent *entry;
+    char fileList[1024] = ""; // To store the list of files
+    while ((entry = readdir(dir)) != NULL)
+    {
+        char filePath[1024];
+        snprintf(filePath, sizeof(filePath), "%s/%s", home_dir, entry->d_name);
+
+        struct stat file_stat;
+        if (stat(filePath, &file_stat) == 0)
+        {
+            // Check if the file creation date is within the specified range
+            time_t file_ctime = file_stat.st_ctime;
+            struct tm *file_time = localtime(&file_ctime);
+            struct tm date1_tm, date2_tm;
+            strptime(date1, "%Y-%m-%d", &date1_tm);
+            strptime(date2, "%Y-%m-%d", &date2_tm);
+
+            if (difftime(mktime(file_time), mktime(&date1_tm)) >= 0 &&
+                difftime(mktime(&date2_tm), mktime(file_time)) >= 0)
+            {
+                // Concatenate file name to fileList
+                strcat(fileList, entry->d_name);
+                strcat(fileList, "\n");
+            }
+        }
+    }
+    closedir(dir);
+
+    // Create a temporary text file to store the list of files
+    char tmpFilePath[] = "/tmp/file_list.txt";
+    int tmpFile = open(tmpFilePath, O_CREAT | O_WRONLY, 0644);
+    if (tmpFile == -1)
+    {
+        perror("open");
+        return;
+    }
+    write(tmpFile, fileList, strlen(fileList));
+    close(tmpFile);
+
+    // Create tar.gz archive of the files list
+    pid_t pid = fork();
+    if (pid == 0)
+    {
+        chdir(home_dir); // Change to the home directory
+        execlp("tar", "tar", "-czvf", "temp.tar.gz", "-T", tmpFilePath, NULL);
+        perror("execlp");
+        exit(EXIT_FAILURE);
+    }
+    else if (pid > 0)
+    {
+        wait(NULL);
+    }
+    else
+    {
+        perror("fork");
+        return;
+    }
+
+    printf("Tar.gz archive created: temp.tar.gz\n");
+
+    // Delete the temporary file
+    if (unlink(tmpFilePath) != 0)
+    {
+        perror("unlink");
+    }
+
+    // Send the tar.gz archive to the client
+    FILE *tar_file = fopen("temp.tar.gz", "rb");
+    if (tar_file)
+    {
+        fseek(tar_file, 0, SEEK_END);
+        long tar_size = ftell(tar_file);
+        rewind(tar_file);
+
+        char *tar_buffer = (char *)malloc(tar_size);
+        fread(tar_buffer, 1, tar_size, tar_file);
+        fclose(tar_file);
+
+        send(client_sd, tar_buffer, tar_size, 0);
+
+        free(tar_buffer);
+    }
+    else
+    {
+        const char *error_msg = "Error creating tar.gz file";
+        send(client_sd, error_msg, strlen(error_msg), 0);
+    }
+}
+// end of client commands
+//=======================
+
 /*
 //=====processClient=======
 main method for processing client requests
@@ -516,6 +623,7 @@ void processClient(int client_sd)
     else if (strncmp(buff1, "getdirf ", 7) == 0)
     {
         // code here
+        getdirf(client_sd, buff1);
     }
 }
 
