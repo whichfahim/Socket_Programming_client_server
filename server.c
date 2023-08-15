@@ -219,7 +219,7 @@ void getdirf(int client_sd, char buff1[])
         if (stat(filePath, &file_stat) == 0)
         {
             // Check if the file creation date is within the specified range
-            time_t file_ctime = file_stat.st_ctime;
+            time_t file_ctime = file_stat.st_mtime;
             struct tm *file_time = localtime(&file_ctime);
             struct tm date1_tm, date2_tm;
             strptime(date1, "%Y-%m-%d", &date1_tm);
