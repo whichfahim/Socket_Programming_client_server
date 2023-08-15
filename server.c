@@ -190,7 +190,7 @@ void searchAndWriteFiles(FILE *file_list, const char *path, const char *extensio
         struct stat entry_stat;
         if (stat(full_path, &entry_stat) != 0)
         {
-            // perror("stat");
+            perror("stat");
             continue;
         }
 
@@ -442,8 +442,7 @@ void targzf(int client_sd, char buff1[])
         char *tar_buffer = (char *)malloc(tar_size);
         fread(tar_buffer, 1, tar_size, tar_file);
         fclose(tar_file);
-        const char *msg = "Finished tarring files.";
-        write(client_sd, msg, strlen(msg) + 1);
+
         send(client_sd, tar_buffer, tar_size, 0);
 
         free(tar_buffer);
@@ -454,6 +453,9 @@ void targzf(int client_sd, char buff1[])
         send(client_sd, error_msg, strlen(error_msg), 0);
     }
 
+    const char *msg = "Finished tarring files.";
+    write(client_sd, msg, strlen(msg));
+
     // Clean up
     remove("file_list.txt");
 }
@@ -462,6 +464,7 @@ void getdirf(int client_sd, char buff1[])
 {
     // Extract date1 and date2 from the command
     char date1[20], date2[20];
+    // date1 (earlier)< date2
     sscanf(buff1 + 9, "%s %s", date1, date2);
 
     // Open the client's home directory
