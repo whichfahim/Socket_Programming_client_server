@@ -38,20 +38,28 @@ int main(int argc, char *argv[])
         exit(2);
     }
 
-    if (connect(client_sd, (struct sockaddrnano *)&servAdd, sizeof(servAdd)) < 0)
-    { // Connect()
-        fprintf(stderr, "connect() failed, exiting\n");
-        exit(3);
+    while (1)
+    {
+        if (connect(client_sd, (struct sockaddrnano *)&servAdd, sizeof(servAdd)) < 0)
+        { // Connect()
+            fprintf(stderr, "connect() failed, retrying...\n");
+            sleep(5);
+            // exit(3);
+        }
+        else
+        {
+            break;
+        }
     }
 
     char buff[50];
     printf("\nEnter the message to be sent to the server\n");
     // scanf("%s",&buff);
     gets(&buff);
-    printf("Sending message: %s\n", buff); // Print the contents of buff before writing
+    // printf("Sending message: %s\n", buff); // Print the contents of buff before writing
     write(client_sd, buff, 100);
 
-    if (read(client_sd, message, 100) < 0)
+    if (read(client_sd, message, 1024) < 0)
     { // read()
         fprintf(stderr, "read() error\n");
         exit(3);
