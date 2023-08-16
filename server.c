@@ -937,7 +937,9 @@ void targzf(int client_sd, char buff1[])
             return;
         }
 
-        printf("Tar.gz archive created: temp.tar.gz\n");
+        char *msg = "Tar.gz archive created: temp.tar.gz\n";
+        write(client_sd, msg, strlen(msg) + 1);
+        // printf("Tar.gz archive created: temp.tar.gz\n");
 
         // Delete the temporary file
 
