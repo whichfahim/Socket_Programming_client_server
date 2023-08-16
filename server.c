@@ -12,6 +12,67 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+void proxy_to_mirror(int client_sd)
+{
+    int mirror_fd;
+    struct sockaddr_in mirror_addr;
+
+    if ((mirror_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+        perror("Socket creation error for mirror connection");
+        return;
+    }
+
+    mirror_addr.sin_family = AF_INET;
+    mirror_addr.sin_port = htons(4500);
+    if (inet_pton(AF_INET, "0.0.0.0", &mirror_addr.sin_addr) <= 0)
+    {
+        perror("Invalid mirror address / Address not supported");
+        return;
+    }
+
+    if (connect(mirror_fd, (struct sockaddr *)&mirror_addr, sizeof(mirror_addr)) < 0)
+    {
+        perror("Connection to mirror failed");
+        return;
+    }
+
+    // Relay data between client and mirror
+    fd_set set;
+    char buffer[1024];
+    while (1)
+    {
+        FD_ZERO(&set);
+        FD_SET(client_sd, &set);
+        FD_SET(mirror_fd, &set);
+
+        int max_fd = (client_sd > mirror_fd) ? client_sd : mirror_fd;
+
+        if (select(max_fd + 1, &set, NULL, NULL, NULL) < 0)
+        {
+            perror("Select failed");
+            break;
+        }
+
+        if (FD_ISSET(client_sd, &set))
+        {
+            int bytes_read = recv(client_sd, buffer, 1024, 0);
+            if (bytes_read <= 0)
+                break;
+            send(mirror_fd, buffer, bytes_read, 0);
+        }
+
+        if (FD_ISSET(mirror_fd, &set))
+        {
+            int bytes_read = recv(mirror_fd, buffer, 1024, 0);
+            if (bytes_read <= 0)
+                break;
+            send(client_sd, buffer, bytes_read, 0);
+        }
+    }
+    close(mirror_fd);
+}
+
 // ==== UTILITY METHODS =====
 void searchDirectory(int client_sd, const char *search_path, const char *filename)
 {
@@ -535,7 +596,9 @@ void getdirf(int client_sd, char buff1[])
         return;
     }
 
-    printf("Tar.gz archive created: temp.tar.gz\n");
+    char *msg = "Finished tarring files";
+    write(client_sd, msg, strlen(msg) + 1);
+    // printf("Tar.gz archive created: temp.tar.gz\n");
 
     // Delete the temporary file
     if (unlink(tmpFilePath) != 0)
@@ -685,18 +748,35 @@ int main(int argc, char *argv[])
     int numChildren = 0; // Count of child processes
     while (1)
     {
-        if (numChildren >= 6)
-        {
-            // Limit the number of children to 6
-            wait(NULL); // Wait for any child process to finish
-            numChildren--;
-        }
+
         printf("Server listening on port: %d...\n", portNumber);
 
         con_sd = accept(lis_sd, (struct sockaddr *)NULL, NULL); // accept()
         if (con_sd < 0)
         {
             perror("accept");
+            continue;
+        }
+
+        /*if (numChildren >= 6)
+        {
+            // Limit the number of children to 6
+            wait(NULL); // Wait for any child process to finish
+            numChildren--;
+        }*/
+
+        if (numChildren > 6 && numChildren <= 2 * 6)
+        {
+            printf("Redirecting client %d to mirror.\n", numChildren);
+            proxy_to_mirror(con_sd);
+            close(con_sd);
+            continue;
+        }
+        else if (numChildren > 2 * 6 && numChildren % 2 == 0)
+        {
+            printf("Redirecting client %d to mirror.\n", numChildren);
+            proxy_to_mirror(con_sd);
+            close(con_sd);
             continue;
         }
 
@@ -724,5 +804,13 @@ int main(int argc, char *argv[])
         {
             printf("error forking");
         }
+    }
+
+    int status;
+    pid_t finished_child = wait(&status); // Wait for any child process to finish
+    if (finished_child > 0)
+    {
+        numChildren--;
+        printf("Child process with PID %d has finished.\n", finished_child);
     }
 }
