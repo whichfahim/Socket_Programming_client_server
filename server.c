@@ -1,3 +1,5 @@
+// Richik Gangopadhyay | 110100739 | Sec 4
+// Fahim Imtiaz | 11099461 | Sec 4
 #include <netinet/in.h> //structure for storing address information
 
 #include <stdio.h>
